@@ -12,18 +12,32 @@ import javafx.scene.layout.HBox;
 import javafx.stage.Stage;
 import javafx.util.Callback;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.net.URL;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.ResourceBundle;
+import java.sql.SQLOutput;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Controller implements Initializable {
 
     @FXML
+    Label currentUsername;
+    @FXML
     ListView<Message> chatContentList;
+    @FXML
+    ListView chatList;
+    @FXML
+    TextArea inputArea;
 
     String username;
+
+    Scanner in;
+    PrintWriter out;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
@@ -40,6 +54,18 @@ public class Controller implements Initializable {
                      if so, ask the user to change the username
              */
             username = input.get();
+            try {
+                Socket s = new Socket("localhost", 1234);
+                in = new Scanner(s.getInputStream());
+                out = new PrintWriter(s.getOutputStream());
+                out.println(username);
+                out.flush();
+                if(in.next().equals("CreationFailed")){
+                    System.out.println("The username already exited, please change the username");
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         } else {
             System.out.println("Invalid username " + input + ", exiting");
             Platform.exit();
@@ -54,14 +80,41 @@ public class Controller implements Initializable {
 
         Stage stage = new Stage();
         ComboBox<String> userSel = new ComboBox<>();
+        userSel.setMinWidth(100);
 
         // FIXME: get the user list from server, the current user's name should be filtered out
-        userSel.getItems().addAll("Item 1", "Item 2", "Item 3");
+
+        Thread thread = new Thread(() -> {
+            out.println("GetUsers");
+            out.flush();
+            String[] names = in.next().split(",");
+
+            Platform.runLater(() -> {
+                for(String name: names){
+                    if(!name.equals(username)) userSel.getItems().add(name);
+                }
+            });
+        });
+        thread.start();
 
         Button okBtn = new Button("OK");
         okBtn.setOnAction(e -> {
             user.set(userSel.getSelectionModel().getSelectedItem());
             stage.close();
+
+            boolean alreadyChatted = false;
+            for (Object chatItem : chatList.getItems()) {
+                if (((ChatItem) chatItem).getName().equals(user.get())) {
+                    alreadyChatted = true;
+                    break;
+                }
+            }
+            if (!alreadyChatted) {
+                // create a new chat item in the left panel
+                ChatItem chatItem = new ChatItem(user.get());
+                chatList.getItems().add(chatItem);
+                chatList.getSelectionModel().select(chatItem);
+            }
         });
 
         HBox box = new HBox(10);
@@ -98,6 +151,7 @@ public class Controller implements Initializable {
     @FXML
     public void doSendMessage() {
         // TODO
+        String msg = inputArea.getText();
     }
 
     /**
@@ -138,6 +192,25 @@ public class Controller implements Initializable {
                     setGraphic(wrapper);
                 }
             };
+        }
+    }
+
+    class ChatItem {
+        private String name;
+//        private LocalDateTime lastMessageTime;
+
+        public ChatItem(String name) {
+            this.name = name;
+//            this.lastMessageTime = lastMessageTime;
+        }
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public String toString() {
+            // Customize the string representation of the chat item
+            return String.format("%s", name);
         }
     }
 }
