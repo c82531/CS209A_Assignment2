@@ -36,8 +36,10 @@ public class Controller implements Initializable {
     TextArea inputArea;
 
     ComboBox<String> userSel;
+    ListView<String> groupUserSel;
 
     HashMap<String, ObservableList<Message>> userMsgList = new HashMap<>();
+    HashMap<String, String> gUser = new HashMap<>();;
 
     String username;
     Scanner in;
@@ -103,7 +105,6 @@ public class Controller implements Initializable {
     @FXML
     public void createPrivateChat() {
         AtomicReference<String> user = new AtomicReference<>();
-
         Stage stage = new Stage();
         userSel = new ComboBox<>();
         userSel.setMinWidth(100);
@@ -115,20 +116,21 @@ public class Controller implements Initializable {
         okBtn.setOnAction(e -> {
             user.set(userSel.getSelectionModel().getSelectedItem());
             stage.close();
-
-            boolean alreadyChatted = false;
-            for (Object chatItem : chatList.getItems()) {
-                if (chatItem.equals(user.get())) {
-                    alreadyChatted = true;
-                    break;
+            if(userSel.getSelectionModel().getSelectedItem() != null){
+                boolean alreadyChatted = false;
+                for (Object chatItem : chatList.getItems()) {
+                    if (chatItem.equals(user.get())) {
+                        alreadyChatted = true;
+                        break;
+                    }
                 }
-            }
-            if (!alreadyChatted) {
-                // create a new chat item in the left panel
-                ObservableList<Message> msgList = FXCollections.observableList(new ArrayList<Message>());
-                userMsgList.put(user.get(), msgList);
-                chatList.getItems().add(user.get());
-                chatList.getSelectionModel().select(user.get());
+                if (!alreadyChatted) {
+                    // create a new chat item in the left panel
+                    ObservableList<Message> msgList = FXCollections.observableList(new ArrayList<Message>());
+                    userMsgList.put(user.get(), msgList);
+                    chatList.getItems().add(user.get());
+                    chatList.getSelectionModel().select(user.get());
+                }
             }
         });
         HBox box = new HBox(10);
@@ -153,7 +155,50 @@ public class Controller implements Initializable {
      */
     @FXML
     public void createGroupChat() {
+        Stage stage = new Stage();
+        groupUserSel = new ListView<>();
+        groupUserSel.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        groupUserSel.setMinWidth(100);
 
+        out.println("GetGroupUsers");
+        out.flush();
+        Button okBtn = new Button("OK");
+        okBtn.setOnAction(e -> {
+            ObservableList<String> selectedUsers = groupUserSel.getSelectionModel().getSelectedItems();
+            stage.close();
+            // create a new chat item in the left panel
+            ObservableList<Message> msgList = FXCollections.observableList(new ArrayList<Message>());
+            StringBuilder show = new StringBuilder();
+            StringBuilder actual = new StringBuilder();
+            List<String> sel = new ArrayList<>(selectedUsers);
+            sel.sort(String::compareTo);
+                for (int i = 0; i < sel.size(); i++) {
+                    show.append(sel.get(i));
+                    if(i == 2 && sel.size() > 3) {
+                        show.append("...");
+                        break;
+                    }
+                    if(i < sel.size()-1) show.append(",");
+                }
+                show.append("(").append(sel.size()).append(")");
+//            }
+            for (int i = 0; i < sel.size(); i++) {
+                actual.append(sel.get(i));
+                if(i < sel.size()-1) actual.append(",");
+            }
+            userMsgList.put(show.toString(), msgList);
+            gUser.put(show.toString(), actual.toString());
+
+            chatList.getItems().add(show.toString());
+            chatList.getSelectionModel().select(show.toString());
+        });
+
+        HBox box = new HBox(10);
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(20, 20, 20, 20));
+        box.getChildren().addAll(groupUserSel, okBtn);
+        stage.setScene(new Scene(box));
+        stage.showAndWait();
     }
 
     /**
@@ -180,7 +225,6 @@ public class Controller implements Initializable {
         ObservableList<Message> msgList = userMsgList.get(receiver);
         msgList.add(message);
         chatContentList.setItems(msgList);
-
         if(data.contains("\n")){
             StringBuilder sb = new StringBuilder(data);
             for (int i = 0; i < data.length(); i++) {
@@ -191,8 +235,13 @@ public class Controller implements Initializable {
             data = sb.toString();
         }
         data = data.trim();
-            System.out.println("Send: " + data);
-        out.println("SendMessage " + time + " "+ username + " " + receiver + " " + data );
+            System.out.println("SendMessage: " + data + " to " + receiver);
+        if(receiver.contains(",")){
+            out.println("SendGroupMessage " + time + " " +
+                    username + " " + gUser.get(receiver) + " " + receiver + " " +data);
+        }else {
+            out.println("SendMessage " + time + " " + username + " " + receiver + " " + data);
+        }
         out.flush();
         inputArea.clear();
     }
@@ -245,6 +294,38 @@ public class Controller implements Initializable {
             while (true) {
                 if(!in.hasNext()) break;
                 String command = in.next();
+                if(command.equals("ServerOffline")){
+                    Platform.runLater(() -> {
+                        Alert alert = new Alert(Alert.AlertType.WARNING);
+                        alert.setTitle("Alert");
+                        alert.setHeaderText(null);
+                        alert.setContentText("Sever Offline!");
+                        alert.showAndWait();
+                        System.exit(0);
+                    });
+                }
+                if(command.equals("UserLeave")){
+                    String u = in.next();
+                    Platform.runLater(() ->{
+                            System.out.println("Leave " + u);
+                        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                        alert.setTitle("Alert");
+                        alert.setHeaderText(null);
+                        alert.setContentText("The other side is offline!\nDo you want to close chat");
+                        ButtonType buttonTypeYes = new ButtonType("Yes", ButtonBar.ButtonData.OK_DONE);
+                        ButtonType buttonTypeNo = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                        alert.getButtonTypes().setAll(buttonTypeYes, buttonTypeNo);
+                        Optional<ButtonType> result = alert.showAndWait();
+                        if (result.isPresent() && result.get() == buttonTypeYes) {
+                            chatList.getItems().remove(u);
+                            userMsgList.remove(u);
+                            if(chatList.getItems() != null) {
+                                chatContentList.setItems(null);
+                            }
+                        }
+
+                    });
+                }
                 if(command.equals("CreationFailed")){
                     System.out.println("The username already exited, please change the username");
                 }
@@ -256,6 +337,14 @@ public class Controller implements Initializable {
                         }
                     });
                 }
+                if(command.equals("SendGroupUserList")){
+                    String[] names = in.next().split(",");
+                    Platform.runLater(() -> {
+                        for(String name: names){
+                            groupUserSel.getItems().add(name);
+                        }
+                    });
+                }
                 if(command.equals("ReceiveMessage")){
                     Long time = in.nextLong();
                     String sentBy = in.next();
@@ -263,19 +352,13 @@ public class Controller implements Initializable {
                     String data = in.nextLine();
                     StringBuilder sb = new StringBuilder(data);
                     if(data.contains("|")){
-//                        StringBuilder sb = new StringBuilder(data);
                         for (int i = 0; i < data.length(); i++) {
                             if (sb.charAt(i) == '|'){
                                 sb.setCharAt(i, '\n');
                             }
                         }
-//                        data = sb.toString();
                     }
-                        System.out.println("received");
-                        System.out.println(username + sendTo);
-                        System.out.println("SentBy: " +sentBy);
-                        System.out.println(data);
-                        System.out.println(sb.toString().trim());
+                        System.out.println("PrivateMessage " + "from " + sentBy + ": " + sb.toString().trim());
                     if(sendTo.equals(username)) {
                         Platform.runLater(() -> {
                             Message message = new Message(time, sentBy, sendTo, sb.toString().trim());
@@ -292,25 +375,88 @@ public class Controller implements Initializable {
                         });
                     }
                 }
+                if(command.equals("ReceiveGroupMessage")){
+                    Long time = in.nextLong();
+                    String sentBy = in.next();
+                    String sendTo = in.next();
+                    String groupUsers = in.next();
+                    String show = in.next();
+                    String data = in.nextLine();
+                    StringBuilder sb = new StringBuilder(data);
+                    if(data.contains("|")){
+//                        StringBuilder sb = new StringBuilder(data);
+                        for (int i = 0; i < data.length(); i++) {
+                            if (sb.charAt(i) == '|'){
+                                sb.setCharAt(i, '\n');
+                            }
+                        }
+//                        data = sb.toString();
+                    }
+                        System.out.println("GroupMessage " + "from " + sentBy + ": " + sb.toString().trim());
+                    if(sendTo.equals(username)) {
+                        Platform.runLater(() -> {
+                            Message message = new Message(time, sentBy, sendTo, sb.toString().trim());
+//                            String selectedUser = (String) chatList.getSelectionModel().getSelectedItem();
+                            if(!userMsgList.containsKey(show)){
+                                ObservableList<Message> msgList = FXCollections.observableList(new ArrayList<Message>());
+                                userMsgList.put(show, msgList);
+                                gUser.put(show, groupUsers);
+                                chatList.getItems().add(show);
+                            }
+                            chatList.getSelectionModel().select(show);
+                            ObservableList<Message> msgList = userMsgList.get(show);
+                            msgList.add(message);
+                            chatContentList.setItems(msgList);
+                        });
+                    }
+                }
             }
         }
     }
-//    class ChatItem {
+    class ChatItem {
 //        private String name;
-////        private LocalDateTime lastMessageTime;
-//
-//        public ChatItem(String name) {
-//            this.name = name;
-////            this.lastMessageTime = lastMessageTime;
-//        }
-//        public String getName() {
-//            return name;
-//        }
-//
-//        @Override
-//        public String toString() {
-//            // Customize the string representation of the chat item
-//            return String.format("%s", name);
-//        }
-//    }
+        public String[] users;
+
+//        private LocalDateTime lastMessageTime;
+
+        public ChatItem(int len) {
+            this.users = new String[len];
+//            this.lastMessageTime = lastMessageTime;
+        }
+
+        public boolean isGroup(){
+            return users.length > 1;
+        }
+
+        @Override
+        public String toString() {
+            // Customize the string representation of the chat item
+            Arrays.sort(users);
+            if(users.length > 3) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < 3; i++) {
+                    sb.append(users[i]);
+                    if(i < 2){
+                        sb.append(",");
+                    }else {
+                        sb.append("...(").append(users.length).append(")");
+                    }
+                }
+                return String.format("%s", sb);
+            }
+            else if (users.length > 1){
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < users.length; i++) {
+                    sb.append(users[i]);
+                    if(i < users.length-1){
+                        sb.append(",");
+                    }
+                }
+                return String.format("%s", sb);
+            }
+            else {
+                return String.format("%s", users[0]);
+            }
+        }
+    }
 }

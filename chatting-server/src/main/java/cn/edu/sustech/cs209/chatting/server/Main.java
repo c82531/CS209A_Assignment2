@@ -6,15 +6,29 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Main {
     private static ConcurrentHashMap<String, Socket> clients = new ConcurrentHashMap<>();
+    private static ConcurrentHashMap<String, List<String>> chatUsers = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws IOException {
         System.out.println("Starting server");
         ServerSocket server = new ServerSocket(1234);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                for(String key: clients.keySet()){
+                    Socket socket = clients.get(key);
+                    PrintWriter o = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+                    o.println("ServerOffline");
+                    o.flush();
+                    System.out.println("ServerOffline");
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }));
 
         while (true) {
             Socket s = server.accept();
@@ -48,16 +62,58 @@ public class Main {
                                 out.println(sb);
                                 out.flush();
                             }
+                            if(command.equals("GetGroupUsers")){
+                                StringBuilder sb = new StringBuilder();
+                                out.println("SendGroupUserList");
+                                out.flush();
+                                for(String key: clients.keySet()){
+                                    sb.append(key);
+                                    sb.append(",");
+                                }
+                                out.println(sb);
+                                out.flush();
+                            }
                             if(command.equals("SendMessage")){
                                 Long time = in.nextLong();
                                 String sentBy = in.next();
                                 String sendTo = in.next();
                                 String data = in.nextLine();
-                                    System.out.println("ReceiveMessage: "  + time + " sentBy: "+ sentBy + " sendTo: " + sendTo + " " + data );
+                                    System.out.println("ReceiveMessage: "  + time + " sentBy: "+ sentBy + " sendTo: " + sendTo + " message: " + data );
                                 Socket receiveSocket = clients.get(sendTo);
+                                if(!chatUsers.containsKey(sendTo)){
+                                    chatUsers.put(sendTo, new ArrayList<>());
+                                }
+                                chatUsers.get(sendTo).add(sentBy);
+
+                                if(!chatUsers.containsKey(sentBy)){
+                                    chatUsers.put(sentBy, new ArrayList<>());
+                                }
+                                chatUsers.get(sentBy).add(sendTo);
                                 PrintWriter outR = new PrintWriter(receiveSocket.getOutputStream());
                                 outR.println("ReceiveMessage "  + time + " "+ sentBy + " " + sendTo + " " + data );
                                 outR.flush();
+                            }
+                            if(command.equals("SendGroupMessage")){
+                                Long time = in.nextLong();
+                                String sentBy = in.next();
+                                String sendTo = in.next();
+                                String show = in.next();
+                                String data = in.nextLine();
+                                    System.out.println("ReceiveGroupMessage: "  + time + " sentBy: "+ sentBy + " sendTo: " + sendTo
+                                            +" show: " + show + " message: " + data );
+                                String[] receivers = sendTo.split(",");
+                                    System.out.println(Arrays.toString(receivers));
+                                for (String receiver : receivers) {
+                                    if(clients.containsKey(receiver)) {
+                                        Socket receiveSocket = clients.get(receiver);
+                                        if (receiveSocket != s) {
+                                            PrintWriter outR = new PrintWriter(receiveSocket.getOutputStream());
+                                            outR.println("ReceiveGroupMessage " + time + " " + sentBy + " "
+                                                    + receiver + " " + sendTo + " " + show + " " + data);
+                                            outR.flush();
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -71,15 +127,38 @@ public class Main {
                         ex.printStackTrace();
                     }
                 } finally {
-                        System.out.println("Quit");
-                    try {
-                        if(clients.containsValue(s)) {
-                            for (String key: clients.keySet()){
-                                if(clients.get(key) == s)
-                                    clients.remove(key);
+                    String user = null;
+                    for(String key: clients.keySet()){
+                        if(clients.get(key) == s){
+                            user = key;
+                            System.out.println("Delete: " + user);
+                            break;
+                        }
+                    }
+                        System.out.println("User " + user + " Quit");
+                    if(user != null && chatUsers.containsKey(user)){
+                        for(String key: chatUsers.get(user)){
+                            if(clients.containsKey(key)) {
+                                try {
+                                    PrintWriter outR = new PrintWriter(clients.get(key).getOutputStream());
+                                    outR.println("UserLeave " + user);
+                                    outR.flush();
+                                        System.out.print("SendLeave to ");
+                                        System.out.println(chatUsers.get(user));
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
                             }
                         }
-                        s.close();
+                        chatUsers.remove(user);
+                    }
+                    try {
+                        if (user != null) {
+                            clients.remove(user);
+                        }
+                        if(!s.isClosed()) {
+                            s.close();
+                        }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
