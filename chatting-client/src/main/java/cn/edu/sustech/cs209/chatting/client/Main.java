@@ -20,7 +20,8 @@ public class Main extends Application {
         stage.setTitle("Chatting Client");
         stage.show();
 
-//        Controller controller = fxmlLoader.getController();
+        Controller controller = fxmlLoader.getController();
+        controller.stage = stage;
         stage.setOnCloseRequest(event -> {
 //            try {
 //                PrintWriter out = new PrintWriter(controller.s.getOutputStream());

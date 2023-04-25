@@ -2,7 +2,6 @@ package cn.edu.sustech.cs209.chatting.client;
 
 import cn.edu.sustech.cs209.chatting.common.Message;
 import javafx.application.Platform;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -12,12 +11,12 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Callback;
 
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -34,6 +33,8 @@ public class Controller implements Initializable {
     ListView chatList;
     @FXML
     TextArea inputArea;
+
+    public Stage stage;
 
     ComboBox<String> userSel;
     ListView<String> groupUserSel;
@@ -246,6 +247,33 @@ public class Controller implements Initializable {
         inputArea.clear();
     }
 
+
+    public void doSendFile(javafx.event.ActionEvent event){
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select a file");
+        File file = fileChooser.showOpenDialog(((Button)event.getSource()).getScene().getWindow());
+        String receiver = (String) chatList.getSelectionModel().getSelectedItem();
+
+        out.println("SendFile " + username + " " + receiver);
+        out.flush();
+        out.println(file.getName());
+        out.flush();
+        out.println(file.length());
+        out.flush();
+        try {
+            byte[] bytes = new byte[(int) file.length()];
+            FileInputStream fis = new FileInputStream(file);
+            BufferedInputStream bis = new BufferedInputStream(fis);
+            bis.read(bytes, 0, bytes.length);
+            OutputStream os = s.getOutputStream();
+            os.write(bytes, 0, bytes.length);
+            os.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     /**
      * You may change the cell factory if you changed the design of {@code Message} model.
      * Hint: you may also define a cell factory for the chats displayed in the left panel, or simply override the toString method.
@@ -408,6 +436,40 @@ public class Controller implements Initializable {
                             msgList.add(message);
                             chatContentList.setItems(msgList);
                         });
+                    }
+                }
+                if(command.equals("ReceiveFile")){
+                    String fileName = in.next();
+                    Platform.runLater(() -> {
+                        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                        alert.setTitle("Alert");
+                        alert.setHeaderText(null);
+                        alert.setContentText("Do you want to receive the file?");
+                        ButtonType buttonTypeYes = new ButtonType("Yes", ButtonBar.ButtonData.OK_DONE);
+                        ButtonType buttonTypeNo = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                        alert.getButtonTypes().setAll(buttonTypeYes, buttonTypeNo);
+                        Optional<ButtonType> result = alert.showAndWait();
+                    });
+
+                    int size = Integer.parseInt(in.next());
+                    String savePath = "C:\\Users\\15405\\Desktop\\receive file\\";
+                    File file = new File(savePath + fileName);
+                    try {
+                        FileOutputStream fos = new FileOutputStream(file);
+                        BufferedInputStream bis = new BufferedInputStream(s.getInputStream());
+                        byte[] bytes = new byte[size];
+                        int bytesRead;
+                        while ((bytesRead = bis.read(bytes)) != -1) {
+                                    fos.write(bytes, 0, bytesRead);
+                            System.out.println("byes: "+ bytesRead);
+                            break;
+                        }
+                                fos.flush();
+                        System.out.println("receive bytes");
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
                     }
                 }
             }

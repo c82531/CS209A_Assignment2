@@ -1,11 +1,10 @@
 package cn.edu.sustech.cs209.chatting.server;
 
-
-
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -113,6 +112,51 @@ public class Main {
                                             outR.flush();
                                         }
                                     }
+                                }
+                            }
+                            if(command.equals("SendFile")){
+                                String sentBy = in.next();
+                                String sendTo = in.next();
+                                    System.out.println("Send file to " + sendTo);
+                                String fileName = in.next();
+                                int size = Integer.parseInt(in.next());
+//                                String savePath = "C:\\Users\\15405\\IdeaProjects\\CS209A_Assignment2\\chatting-server\\src\\main\\";
+//                                File file = new File(savePath + fileName);
+//                                FileOutputStream fos = new FileOutputStream(file);
+                                BufferedInputStream bis = new BufferedInputStream(s.getInputStream());
+                                byte[] bytes = new byte[size];
+                                int bytesRead;
+                                while ((bytesRead = bis.read(bytes)) != -1) {
+//                                    fos.write(bytes, 0, bytesRead);
+                                    System.out.println("byes: "+ bytesRead);
+                                    break;
+                                }
+//                                fos.flush();
+                                    System.out.println("receive bytes");
+
+                                Socket receiveSocket = clients.get(sendTo);
+                                PrintWriter outR = new PrintWriter(receiveSocket.getOutputStream());
+                                outR.println("ReceiveFile " + fileName + " " + size);
+                                outR.flush();
+
+                                if(!chatUsers.containsKey(sendTo)){
+                                    chatUsers.put(sendTo, new ArrayList<>());
+                                }
+                                if(!chatUsers.get(sendTo).contains(sentBy)) {
+                                    chatUsers.get(sendTo).add(sentBy);
+                                }
+                                if(!chatUsers.containsKey(sentBy)){
+                                    chatUsers.put(sentBy, new ArrayList<>());
+                                }
+                                if(!chatUsers.get(sentBy).contains(sendTo)) {
+                                    chatUsers.get(sentBy).add(sendTo);
+                                }
+                                try {
+                                    OutputStream os = receiveSocket.getOutputStream();
+                                    os.write(bytes, 0, bytes.length);
+                                    os.flush();
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
                                 }
                             }
                         }
